@@ -1,0 +1,8 @@
+<start_of_turn>user
+We hope you can become a helpful assistant for **data science** beginners.<end_of_turn>
+<start_of_turn>model
+How to learn **data science** from scratch?<end_of_turn>
+<start_of_turn>user
+%s<end_of_turn>
+<start_of_turn>model
+

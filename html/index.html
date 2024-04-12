@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Assistant for Data Science Beginners</title>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/element-ui@2.15.14/lib/theme-chalk/index.css">
+  <link rel="stylesheet" href="https://unpkg.com/prismjs@1.29.0/themes/prism.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/katex@0.16.9/dist/katex.min.css">
+  <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+  <div id="app" class="client-area">
+    <div :style="appContainer">
+      <el-card ref="messages" header="AI Assistant for Data Science Beginners" :style="msgContainer">
+        <div slot="header">
+          <b>AI Assistant for Data Science Beginners</b>
+          <div style="float:right;margin-top:-1px;">
+            <a class="github-button" href="https://github.com/ufownl/lua-cgemma" data-icon="octicon-star" aria-label="Star ufownl/lua-cgemma on GitHub">Star</a>
+            <a class="github-button" href="https://github.com/ufownl" aria-label="Follow @ufownl on GitHub">Follow @ufownl</a>
+          </div>
+        </div>
+        <table v-if="messages.length > 0">
+          <tr v-for="(msg, idx) in messages" :key="'msg_' + idx">
+            <td style="vertical-align:top;width:50px;">
+              <img v-if="msg.role === 'gemma'" class="avatar" src="img/gemma_avatar.png">
+              <img v-else-if="msg.role === 'user'" class="avatar" src="img/default_avatar.png">
+            </td>
+            <td>
+              <div v-if="msg.role === 'system'">
+                <b style="color:#909399">{{ msg.text }}</b>
+              </div>
+              <div v-else-if="msg.role === 'error'">
+                <b style="color:#F56C6C">{{ 'Error: ' + msg.text }}</b>
+              </div>
+              <div v-else>
+                <div style="margin-bottom:10px">
+                  <b v-if="msg.role === 'user'" style="color:Chocolate">You</b>
+                  <b v-else>Gemma</b>
+                </div>
+                <div :ref="'msg_content_' + idx" class="bubble">
+                  <vue-markdown v-if="msg.markdown" :linkify="false">{{ msg.text }}</vue-markdown>
+                  <pre v-else-if="msg.text===''" class="el-icon-loading" style="font-size:16px"></pre>
+                  <pre v-else style="font-size:16px">{{ msg.text }}</pre>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </table>
+        <el-empty v-else />
+      </el-card>
+      <p>
+        <el-input v-model="text" placeholder="Enter your message here" :disabled="!ws" @keyup.enter.native="sendText">
+          <el-button slot="append" :disabled="!text" @click="sendText">Send</el-button>
+        </el-input>
+      </p>
+    </div>
+  </div>
+</body>
+<script src="https://unpkg.com/vue@2.7.15/dist/vue.min.js"></script>
+<script src="https://unpkg.com/element-ui@2.15.14/lib/index.js"></script>
+<script src="https://unpkg.com/vue-markdown-v2@0.1.7/dist/vue-markdown.js"></script>
+<script src="https://unpkg.com/prismjs@1.29.0/components/prism-core.min.js" data-manual></script>
+<script src="https://unpkg.com/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+<script>
+  const wsUrl = window.location.origin.replace('http', 'ws') + '/cgemma/session'
+  Vue.use(VueMarkdown);
+  Prism.hooks.add('before-all-elements-highlight', env => {
+    env.elements.forEach(element => {
+      if (element.className.match(/c\+\+/i)) {
+        element.className = 'language-cpp'  // Fix C++ parse issue
+      } else if (element.className.match(/c#/i)) {
+        element.className = 'language-csharp'  // Fix C# parse issue
+      }
+    })
+  })
+  new Vue({
+    el: '#app',
+    data() {
+      return {
+        clientHeight: 0,
+        clientWidth: 0,
+        ws: null,
+        messages: [{role: 'system', text: 'Loading model...'}],
+        text: ''
+      }
+    },
+    computed: {
+      appContainer() {
+        const margin = this.clientWidth > 800 ? (this.clientWidth - 800) / 2 : 0
+        return {
+          marginLeft: margin + 'px',
+          marginRight: margin + 'px',
+          padding: '8px'
+        }
+      },
+      msgContainer() {
+        return {
+          height: this.clientHeight - 90 + 'px',
+          overflow: 'auto'
+        }
+      }
+    },
+    mounted() {
+      this.clientHeight = this.$el.clientHeight
+      this.clientWidth = this.$el.clientWidth
+      window.onresize = () => {
+        this.clientHeight = this.$el.clientHeight
+        this.clientWidth = this.$el.clientWidth
+      }
+      const ws = new WebSocket(wsUrl)
+      ws.onerror = evt => {
+        this.messages.push({
+          role: 'error',
+          text: 'Connection error!'
+        })
+        this.ws = null
+      }
+      ws.onclose = evt => {
+        this.messages.push({
+          role: 'error',
+          text: 'Connection closed!'
+        })
+        this.ws = null
+      }
+      ws.onopen = evt => {
+        ws.onmessage = evt => {
+          this.handleMessage(JSON.parse(evt.data))
+        }
+        this.ws = ws
+        this.keepalive()
+      }
+    },
+    methods: {
+      sendText() {
+        if (this.text) {
+          const msg = {
+            role: 'user',
+            text: this.text,
+            markdown: true
+          }
+          this.ws.send(JSON.stringify(msg))
+          this.messages.push(msg)
+          this.text = ''
+          this.autoScroll()
+        }
+      },
+      keepalive() {
+        setTimeout(() => {
+          if (this.ws) {
+            this.ws.send(JSON.stringify({ role: 'user' }))
+            this.keepalive()
+          }
+        }, 30000)
+      },
+      handleMessage(msg) {
+        if (msg.role === 'system') {
+          this.messages.push(msg)
+        } else if (msg.role === 'gemma') {
+          if (msg.pos === 0) {
+            this.messages.push({
+              role: msg.role,
+              text: ''
+            })
+          } else if (msg.pos >= msg.prompt_size) {
+            const popped_messages = []
+            let last_msg = this.messages.pop()
+            while (last_msg.role !== msg.role) {
+              popped_messages.push(last_msg)
+              last_msg = this.messages.pop()
+            }
+            if (msg.token) {
+              this.messages.push({
+                role: msg.role,
+                text: last_msg.text + msg.token
+              })
+            } else {
+              this.messages.push({
+                role: msg.role,
+                text: last_msg.text,
+                markdown: true
+              })
+              const content = this.$refs['msg_content_' + (this.messages.length - 1)][0]
+              this.$nextTick(() => {
+                Prism.highlightAllUnder(content)
+              })
+            }
+            while (popped_messages.length > 0) {
+              this.messages.push(popped_messages.pop())
+            }
+          }
+        }
+        this.autoScroll()
+      },
+      autoScroll() {
+        this.$nextTick(() => {
+          this.$refs.messages.$el.scrollTop = this.$refs.messages.$el.scrollHeight
+        })
+      }
+    }
+  })
+</script>

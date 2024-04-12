@@ -1,0 +1,13 @@
+# log and pid files
+*.log
+*.pid
+
+# nginx temporary directories
+*_temp/
+
+# Model files
+*.spm
+*.sbs
+
+# Binary data files
+*.bin
